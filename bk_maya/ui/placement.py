@@ -522,6 +522,9 @@ def _get_viewport_widget() -> QWidget | None:
             for sh_name in ("shiboken6", "shiboken2"):
                 try:
                     sh = __import__(sh_name)
+                except ImportError:
+                    continue  # wrong Qt binding for this Maya; try the next
+                try:
                     return sh.wrapInstance(int(ptr), QWidget)
                 except Exception:
                     log.exception("Failed to wrap M3dView widget with %s:", sh_name)
@@ -546,6 +549,9 @@ def _get_viewport_widget() -> QWidget | None:
                     for sh_name in ("shiboken6", "shiboken2"):
                         try:
                             sh = __import__(sh_name)
+                        except ImportError:
+                            continue  # wrong Qt binding for this Maya; try the next
+                        try:
                             return sh.wrapInstance(int(ptr), QWidget)  # type: ignore
                         except Exception:
                             log.exception("Failed to wrap modelPanel widget with %s:", sh_name)
