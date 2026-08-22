@@ -523,9 +523,17 @@ def main() -> int:
                 return 1
 
     try:
-        if os.path.isfile(out_usd) and os.path.getsize(out_usd) > 0:
+        # Prefer the MaterialX wrapper (.usda) written by the recipe; fall back
+        # to the plain .usd crate (older exports / MaterialX unavailable).
+        out_usda = os.path.splitext(out_usd)[0] + ".usda"
+        cached = ""
+        if os.path.isfile(out_usda) and os.path.getsize(out_usda) > 0:
+            cached = out_usda
+        elif os.path.isfile(out_usd) and os.path.getsize(out_usd) > 0:
+            cached = out_usd
+        if cached:
             status("Using cached USD")
-            log_line(f"reusing cached usd: {out_usd}")
+            log_line(f"reusing cached usd: {cached}")
             progress(0.99, "Using cached USD")
         else:
             run_export_usd(args, blend_path, out_usd)
@@ -534,8 +542,11 @@ def main() -> int:
         traceback.print_exc(file=sys.stdout)
         return 1
 
+    # Maya loads the .usda wrapper when present (references our .mtlx), else the
+    # plain .usd — this is the fallback for assets exported by older plugins.
+    primary = out_usda if os.path.isfile(out_usda) else out_usd
     progress(1.0, "done")
-    done(out_usd)
+    done(primary)
     return 0
 
 
