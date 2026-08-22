@@ -278,5 +278,54 @@
             }
         },
 
+        {
+            "name": "Convert .blend → USD (no Maya)",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/_debug/convert_blend.py",
+            "args": [
+                "${input:blendPath}",
+            ],
+            "windows": {
+                "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            },
+            "linux": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            },
+            "osx": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            }
+        },
+
+        {
+            "name": "Convert current .blend → USD (no Maya)",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/_debug/convert_blend.py",
+            "args": [
+                "${file}",
+            ],
+            "windows": {
+                "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            },
+            "linux": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            },
+            "osx": {
+                "python": "${workspaceFolder}/.venv/bin/python",
+            }
+        },
+
+    ],
+    "inputs": [
+        {
+            "id": "blendPath",
+            "type": "promptString",
+            "description": "Absolute path to the .blend file to convert to USD"
+        }
     ]
 }

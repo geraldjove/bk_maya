@@ -58,6 +58,20 @@ log = logging.getLogger(__name__)
 
 _active_jobs: list[_DownloadController] = []
 
+# ---------------------------------------------------------------------------
+# USD material import order
+# ---------------------------------------------------------------------------
+# The exported USD carries BOTH a MaterialX network (higher PBR fidelity —
+# metallic / roughness / normal maps) and a UsdPreviewSurface fallback (see
+# client/tools/export_usd.py: generate_materialx_network=True). mayaUSDImport
+# walks this list per material and uses the first mode that yields a shader,
+# so MaterialX is listed first and UsdPreviewSurface is the fallback for any
+# material the MaterialX reader can't build.
+_USD_SHADING_MODES = [
+    ("useRegistry", "MaterialX"),
+    ("useRegistry", "UsdPreviewSurface"),
+]
+
 
 # ---------------------------------------------------------------------------
 # Viewport cancel badge — a floating [X] next to each downloading gizmo.
@@ -823,7 +837,7 @@ class _DownloadController:
             cmds.mayaUSDImport(
                 file=usd_path,
                 readAnimData=False,
-                shadingMode=[("useRegistry", "UsdPreviewSurface")],
+                shadingMode=_USD_SHADING_MODES,
                 preferredMaterial="standardSurface",
                 importInstances=True,
             )
@@ -998,7 +1012,7 @@ class _DownloadController:
             cmds.mayaUSDImport(
                 file=usd_path,
                 readAnimData=False,
-                shadingMode=[("useRegistry", "UsdPreviewSurface")],
+                shadingMode=_USD_SHADING_MODES,
                 preferredMaterial="standardSurface",
                 importInstances=True,
             )
