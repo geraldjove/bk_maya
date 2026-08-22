@@ -74,6 +74,19 @@ VENDOR_PACKAGES = [
     "requests",  # HTTP client used by core/ and api/
 ]
 
+# Python build targets. Maya ships different interpreters per release
+# (Maya 2023 = 3.9, Maya 2024–2027 = 3.11) and some pure-Python deps drop old
+# Pythons in newer versions (e.g. requests 2.34.x needs 3.10+, so 3.9 resolves
+# to 2.32.x). Each target vendors versions compatible with its interpreter and
+# produces a separately named zip. ``pip download --python-version`` lets the
+# resolver honour every candidate's ``Requires-Python`` from a single 3.11 venv.
+#   label: (zip filename suffix, pip --python-version value or None)
+PYTHON_BUILD_TARGETS = {
+    "current": ("", None),  # whatever the running interpreter resolves; no suffix
+    "3.9": ("-py39", "3.9"),  # Maya 2023
+    "3.11": ("-py311", "3.11"),  # Maya 2024–2027
+}
+
 # Absolute path to the vendored lib/ directory. Anchored to this file's location
 # (this script lives in the ``bk_maya/`` package dir) rather than the current
 # working directory, so vendoring always targets ``bk_maya/lib`` no matter where
@@ -82,7 +95,11 @@ VENDOR_PACKAGES = [
 _LIB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
 
 
-def vendor_packages(lib_dir: str, packages: list[str] = VENDOR_PACKAGES) -> None:
+def vendor_packages(
+    lib_dir: str,
+    packages: list[str] = VENDOR_PACKAGES,
+    python_version: str | None = None,
+) -> None:
     """Download pure-Python wheels and extract them into *lib_dir*.
 
     Uses ``pip download --no-deps --only-binary=:all:`` so only pre-built
@@ -90,25 +107,29 @@ def vendor_packages(lib_dir: str, packages: list[str] = VENDOR_PACKAGES) -> None
     are tagged ``py3-none-any`` and are identical on every platform/arch, so
     one vendoring pass covers Windows, macOS and Linux for both x86_64 and
     arm64.
+
+    When *python_version* is given (e.g. ``"3.9"``) it is passed to pip's
+    ``--python-version`` so the resolver picks the newest release each package
+    still supports on that interpreter (e.g. requests 2.32.x for 3.9 instead of
+    the 3.10+-only 2.34.x). This runs fine from the 3.11 dev venv.
     """
-    print(f"Vendoring {packages} into {lib_dir} ...")
+    label = python_version or "current interpreter"
+    print(f"Vendoring {packages} into {lib_dir} (python {label}) ...")
     os.makedirs(lib_dir, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as tmp:
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "download",
-                "--no-deps",
-                "--only-binary=:all:",
-                "--dest",
-                tmp,
-                *packages,
-            ],
-            check=True,
-        )
+        download_cmd = [
+            sys.executable,
+            "-m",
+            "pip",
+            "download",
+            "--no-deps",
+            "--only-binary=:all:",
+        ]
+        if python_version is not None:
+            download_cmd += ["--python-version", python_version]
+        download_cmd += ["--dest", tmp, *packages]
+        subprocess.run(download_cmd, check=True)
 
         for whl_name in sorted(os.listdir(tmp)):
             if not whl_name.endswith(".whl"):
@@ -590,6 +611,7 @@ def do_build(
     release_tag=None,
     channel=CHANNEL_DEV,
     version=None,
+    python_targets=("current",),
 ):
     """Build the Maya add-on into ``./out`` and a versioned zip.
 
@@ -604,7 +626,7 @@ def do_build(
                 bk_maya/_build_version.py  # generated version stamp
                 client/vX.Y.Z/      # platform client binaries
                 README.md, LICENSE, INSTALL.txt
-        out/blendkit-maya-<version>.zip   # ships blendkit.mod + blendkit/
+        out/blendkit-maya-<version>[-pyXY].zip   # ships blendkit.mod + blendkit/
 
     The ``.mod`` lives *next to* (not inside) the ``blendkit/`` folder because
     Maya resolves the module path on its ``+ blendkit <ver> blendkit`` line
@@ -629,6 +651,10 @@ def do_build(
       ``-alpha`` suffix and is recorded in the built package.
     - version: explicit full version override; otherwise computed from
       ``BASE_VERSION`` + a UTC ``YYMMDDHHmm`` stamp.
+    - python_targets: one or more keys of ``PYTHON_BUILD_TARGETS``. Each target
+      re-vendors ``lib/`` for its Maya interpreter and emits its own zip
+      (``…-py39.zip`` / ``…-py311.zip``); ``"current"`` keeps the unsuffixed
+      name. Pass ``("3.9", "3.11")`` to ship both Maya interpreter builds.
     """
     full_version = compute_version(channel, version)
     print(f"=== Building Blendkit for Maya {full_version} (channel={channel}) ===")
@@ -721,12 +747,24 @@ def do_build(
     # Hardcoded install instructions (top-level + inside the module folder).
     write_install_text(stage_dir, full_version, channel)
 
-    # CREATE ZIP — name carries the version; contents are blendkit.mod +
+    # CREATE ZIP(S) — one per requested Python target. The client binaries and
+    # sources are identical across targets; only the vendored lib/ differs, so
+    # re-vendor it in place before each archive. The zip name carries the
+    # version (+ a -pyXY suffix per target); contents are blendkit.mod +
     # blendkit/ at the archive root (so unzip-into-modules just works).
-    zip_base = os.path.join(out_dir, f"blendkit-maya-{full_version}")
-    print("Creating ZIP archive.")
-    zip_path = shutil.make_archive(zip_base, "zip", stage_dir)
-    print(f"Wrote {zip_path}")
+    stage_lib_dir = os.path.join(addon_build_dir, "bk_maya", "lib")
+    built_zips = []
+    for target in python_targets:
+        suffix, pip_python_version = PYTHON_BUILD_TARGETS[target]
+        # Swap lib/ to the versions compatible with this target's interpreter.
+        shutil.rmtree(stage_lib_dir, ignore_errors=True)
+        vendor_packages(stage_lib_dir, python_version=pip_python_version)
+
+        zip_base = os.path.join(out_dir, f"blendkit-maya-{full_version}{suffix}")
+        print(f"Creating ZIP archive for python target '{target}'.")
+        zip_path = shutil.make_archive(zip_base, "zip", stage_dir)
+        print(f"Wrote {zip_path}")
+        built_zips.append(zip_path)
 
     if install_at is not None:
         for location in install_at:
@@ -760,6 +798,9 @@ parser.add_argument(
             the bk_client GitHub releases (or --client-build for a local signed
             bundle) instead of compiling.
   VENDOR  = (re)download pure-Python vendor packages into bk_maya/lib/.
+
+  Pass --python {current,3.9,3.11,both} to build/release to control which Maya
+  interpreter(s) lib/ is vendored for; 'both' emits -py39 and -py311 zips.
   """,
 )
 parser.add_argument(
@@ -815,7 +856,23 @@ parser.add_argument(
         "the version is computed from BASE_VERSION + a UTC YYMMDDHHmm stamp."
     ),
 )
+parser.add_argument(
+    "--python",
+    type=str,
+    choices=["current", "3.9", "3.11", "both"],
+    default="current",
+    help=(
+        "Which Maya Python interpreter(s) to vendor lib/ for and emit a zip. "
+        "'3.9' = Maya 2023 (requests 2.32.x), '3.11' = Maya 2024-2027 "
+        "(requests 2.34.x), 'both' emits both -py39 and -py311 zips, "
+        "'current' (default) keeps a single unsuffixed zip built for the "
+        "running interpreter."
+    ),
+)
 args = parser.parse_args()
+
+# Map the --python flag to concrete PYTHON_BUILD_TARGETS keys.
+py_targets = ["3.9", "3.11"] if args.python == "both" else [args.python]
 
 if args.command == "build":
     do_build(
@@ -824,6 +881,7 @@ if args.command == "build":
         client_source="build",
         channel=args.channel,
         version=args.version,
+        python_targets=py_targets,
     )
 elif args.command == "release":
     # Ship signed binaries: use a locally supplied signed bundle when given,
@@ -836,6 +894,7 @@ elif args.command == "release":
             client_bundle=args.client_build,
             channel=args.channel,
             version=args.version,
+            python_targets=py_targets,
         )
     else:
         do_build(
@@ -845,6 +904,7 @@ elif args.command == "release":
             release_tag=args.client_tag,
             channel=args.channel,
             version=args.version,
+            python_targets=py_targets,
         )
 elif args.command == "vendor":
     vendor_packages(_LIB_DIR)

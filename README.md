@@ -80,10 +80,12 @@ and load `maya_plugin.py` from `Windows ▸ Settings/Preferences ▸ Plug-in Man
 - **Automated releases** (see [.github/workflows/release.yml](.github/workflows/release.yml)):
   - merge to **`main`** → rolling **Alpha** prerelease,
   - push to **`master`** or the manual *Run workflow* button → **stable** release.
-- **Zip contents** (`blendkit-maya-<version>.zip`): the version is in the
-  filename, and the archive holds the `blendkit.mod` file next to the
-  `blendkit/` module folder. Unzip **both** into a Maya `modules` directory
-  and restart Maya — see the bundled `INSTALL.txt`.
+- **Zip contents** (`blendkit-maya-<version>-py39.zip` / `-py311.zip`): the
+  version is in the filename, and the archive holds the `blendkit.mod` file next
+  to the `blendkit/` module folder. Pick the zip matching your Maya's Python —
+  `-py39` for Maya 2023, `-py311` for Maya 2024–2027 (they differ only in the
+  vendored `lib/` dependency versions). Unzip **both** files into a Maya
+  `modules` directory and restart Maya — see the bundled `INSTALL.txt`.
 - **Build channels locally:**
 
   ```powershell
@@ -91,6 +93,7 @@ and load `maya_plugin.py` from `Windows ▸ Settings/Preferences ▸ Plug-in Man
   python bk_maya/dev.py build --channel alpha # alpha      -> 0.1.<stamp>-alpha
   python bk_maya/dev.py build --channel stable
   python bk_maya/dev.py build --version 0.1.2506071430   # explicit override
+  python bk_maya/dev.py release --python both             # emit -py39 + -py311 zips
   ```
 
 > **Client binaries (future change):** today the Go client is compiled from

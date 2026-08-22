@@ -75,7 +75,7 @@ jobs:
         # signed bundle instead, append: --client-build <bk_client.zip>
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python bk_maya/dev.py release --channel "${{ steps.channel.outputs.channel }}"
+        run: python bk_maya/dev.py release --channel "${{ steps.channel.outputs.channel }}" --python both
 
       - name: Read built version
         id: version
@@ -84,13 +84,19 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Built version: $VERSION"
 
-      - name: Name the artifact
+      - name: Name the artifacts
         id: artifact
         run: |
-          BUILT="out/blendkit-maya-${{ steps.version.outputs.version }}.zip"
-          NAME="blendkit-maya-${{ steps.version.outputs.version }}.zip"
-          cp "$BUILT" "$NAME"
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          # One zip per Maya interpreter: -py39 (Maya 2023) and -py311 (Maya 2024-2027).
+          PY39="out/blendkit-maya-${{ steps.version.outputs.version }}-py39.zip"
+          PY311="out/blendkit-maya-${{ steps.version.outputs.version }}-py311.zip"
+          ls -l "$PY39" "$PY311"
+          {
+            echo "files<<EOF"
+            echo "$PY39"
+            echo "$PY311"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       # ── ALPHA: a versioned pre-release, tagged like stable but with -alpha ──
       # The built version already carries the `-alpha` suffix (e.g.
@@ -108,9 +114,13 @@ jobs:
             - Version: `${{ steps.version.outputs.version }}`
             - Commit: ${{ github.sha }}
 
-            **Install:** download the zip, unzip it into a Maya `modules`
-            directory, then restart Maya. No extra packages or setup required.
-          files: ${{ steps.artifact.outputs.name }}
+            **Install:** download the zip for your Maya version, unzip it into a
+            Maya `modules` directory, then restart Maya. No extra packages or
+            setup required.
+
+            - `…-py39.zip` → Maya 2023 (Python 3.9)
+            - `…-py311.zip` → Maya 2024–2027 (Python 3.11)
+          files: ${{ steps.artifact.outputs.files }}
 
       # ── STABLE: a normal, versioned release ───────────────────────────────
       - name: Publish stable release
@@ -125,6 +135,10 @@ jobs:
 
             - Commit: ${{ github.sha }}
 
-            **Install:** download the zip, unzip it into a Maya `modules`
-            directory, then restart Maya. No extra packages or setup required.
-          files: ${{ steps.artifact.outputs.name }}
+            **Install:** download the zip for your Maya version, unzip it into a
+            Maya `modules` directory, then restart Maya. No extra packages or
+            setup required.
+
+            - `…-py39.zip` → Maya 2023 (Python 3.9)
+            - `…-py311.zip` → Maya 2024–2027 (Python 3.11)
+          files: ${{ steps.artifact.outputs.files }}
