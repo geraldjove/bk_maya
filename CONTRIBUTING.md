@@ -3,25 +3,37 @@
 Blendkit add-on is an open-source project and we welcome contributions from the community.
 
 ## Add-on Architecture
-Blendkit add-on is made of two main parts:
-- Blender add-on written in Python, which is responsible for the user interface and interaction with Blender. It draws the search panel, does the snaping, asset imports, and communicates with the Client locally.
-- Client written in Go, which serves as background HTTP server - a bridge between Blendkit add-on and Blendkit server. It's purpose is to offload the work from Blender and to provide a performant way to communicate with Blendkit server.
+Blendkit for Maya is made of two main parts:
+- Maya plugin written in Python, which is responsible for the user interface and interaction with Maya. It draws the asset bar / search UI, does the drag-and-drop placement, asset imports (via a headless Blender that converts assets to USD), and communicates with the Client locally. Its Qt UI targets both PySide2 (Maya 2023) and PySide6 (Maya 2024+) through the vendored `qtpy` shim.
+- Client written in Go, which serves as background HTTP server - a bridge between the Blendkit add-on and the Blendkit server. Its purpose is to offload the work from Maya and to provide a performant way to communicate with the Blendkit server. The Go client lives in its own repository, embedded here as the `bk_client` submodule (`bk_client/client`).
 
-Client is compiled and it's binaries are bundled into the add-on .zip file, so the user does not need to install anything else than the add-on itself.
+Client is compiled and its binaries are bundled into the add-on .zip file, so the user does not need to install anything else than the add-on itself.
 
 ### How it is packaged
-Blendkit add-on is packaged as a zip file (standard way for Blender add-ons), which contains all the necessary files for the add-on to work.
-This includes not only the Python files, icons and other files, but also the Client binaries for 3 platforms on 2 architectures (windows x86_64, windows arm64, macos x86_64, macos arm64, linux x86_64, linux arm64).
-When add-on is registered, it chooses the correct Client binary for the platform and architecture and copies it to the user's Blendkit data directory, from this location the Client is later started.
+Blendkit for Maya is packaged as a standard Maya **module**: the release zip
+contains a `blendkit.mod` module file next to a `blendkit/` folder holding the
+Python sources, icons, the vendored pure-Python `lib/` dependencies, and the
+Client binaries for 3 platforms on 2 architectures (windows x86_64, windows
+arm64, macos x86_64, macos arm64, linux x86_64, linux arm64). Users install by
+unzipping **both** items into a Maya `modules` directory and restarting Maya.
+
+Because Maya ships different Python interpreters per version, releases publish
+**two** zips that differ only in their vendored `lib/`:
+- `blendkit-maya-<version>-py39.zip` — Maya 2023 (Python 3.9),
+- `blendkit-maya-<version>-py311.zip` — Maya 2024–2027 (Python 3.11).
+
+When the plugin loads, it chooses the correct Client binary for the platform and
+architecture and copies it to the user's Blendkit data directory, from which the
+Client is later started.
 
 ### How it works
 Communication between Add-on and Client happens in one way direction: add-on schedules Tasks via request and periodically gets updates about the progress and results of the tasks in reponses to the requests:
 `Add-on -> Client -> Server`
 
-1. add-on checks whether the Client is running. If it is not, it starts the Client binary located at `<global-directory>/client/bin/vX.Y.Z/blenderkit-client-<platform>-<architecture>`,
+1. add-on checks whether the Client is running. If it is not, it starts the bundled Client binary (`client/vX.Y.Z/blenderkit-client-<platform>-<architecture>`, copied into the user's Blendkit data directory on first run),
 2. add-on periodically asks for results with GET request and Client responds to the request,
 
-3. if needed add-on sends requests (identifying itself with app_id which is PID of running Blender instance) for search, download asset, get notifications, download thumbnails etc. to the Client
+3. if needed add-on sends requests (identifying itself with app_id which is the PID of the running Maya instance) for search, download asset, get notifications, download thumbnails etc. to the Client
 4. Client receives the request for work, saves it into `var Tasks map[int]map[string]*Task` and ASAP responds by OK to not block the add-on,
 5. Client starts the work in goroutine, or makes request to Blendkit server, or combination of both,
 6. When work is done, or response comes from Blendkit server, Client updates the results into `var Tasks map[int]map[string]*Task`.
@@ -37,28 +49,30 @@ Do not use `print()` statements in the code, use logging instead.
 In the beginning of the file, there is a logger setup, if it is not already there, add it:
 ```python
 import logging
-bk_logger = logging.getLogger(__name__)
+
+log = logging.getLogger(__name__)
 ```
 
-Then instead of `print()` use the `bk_logger`:
+Then instead of `print()` use `log`:
 ```python
-bk_logger.debug("Some minor stuff happened")
-bk_logger.info("Something expected has happened")
-bk_logger.warning("Something unexpected has happened")
-bk_logger.error("Something went very wrong")
+log.debug("Some minor stuff happened")
+log.info("Something expected has happened")
+log.warning("Something unexpected has happened")
+log.error("Something went very wrong")
 ```
 
-If you have an exception which you can log, use `bk_logger.exception()`, e.g.:
+If you have an exception which you can log, use `log.exception()`, e.g.:
 ```python
-except Exception as e:
-    bk_logger.exception("Something went wrong and you will see full traceback below")
+except Exception:
+    log.exception("Something went wrong and you will see full traceback below")
 ```
 
 ### Codestyle
 
 We use `ruff` for lint and formatting of Python code, `pydoclint` for docstring
-consistency and `bandit` for security checks. `go fmt` formats Go code in
-`./client`. The exact versions used by CI are pinned in `pyproject.toml` under
+consistency and `bandit` for security checks. The Go client is formatted and
+tested in its own repository (the `bk_client` submodule), not here. The exact
+tool versions used by CI are pinned in `pyproject.toml` under
 `[dependency-groups].dev`.
 
 Install the dev tools into your active environment:
@@ -74,28 +88,32 @@ ruff check .
 ruff format .
 pydoclint .
 bandit -c _bandit.yaml -ll -r .
-gofmt -l ./client
 ```
 
 Pull requests will fail in CI if any of these report errors.
 
 ### Building the add-on
 
-Use `bk_maya/dev.py` from the repo root to build the add-on. The script copies
-the relevant files into `out/blenderkit` (skipping anything not needed in the
-shipped add-on) and produces `out/blenderkit.zip`.
+Use `bk_maya/dev.py` from the repo root to build the add-on. The script vendors
+the pure-Python `lib/` dependencies, assembles the module under
+`out/stage/blendkit` (skipping anything not needed in the shipped add-on) and
+produces a versioned zip such as `out/blendkit-maya-<version>.zip`.
 
 To build run:
 ```
 python bk_maya/dev.py build
 ```
 
+Pass `--python {current,3.9,3.11,both}` to control which Maya interpreter the
+vendored `lib/` targets; `both` emits the `-py39` and `-py311` zips that are
+shipped in releases.
+
 #### Development build: build for quick testing
 
-`bk_maya/dev.py` accepts `--install-at` to copy the built `out/blenderkit`
-directly into a Maya modules / scripts location, so the add-on is ready to load
-on the next Maya start. The flag can be passed multiple times to install into
-several targets at once.
+`bk_maya/dev.py` accepts `--install-at` to copy the built `blendkit/` module and
+its `blendkit.mod` directly into a Maya `modules` directory, so the add-on is
+ready to load on the next Maya start. The flag can be passed multiple times to
+install into several targets at once.
 
 ```
 python bk_maya/dev.py build --install-at /path/to/maya/modules
@@ -110,15 +128,17 @@ python bk_maya/dev.py build --install-at /path/to/maya/modules --clean-dir ~/ble
 
 ## Releasing
 
-Before release update the add-on version in `__init__.py` and
-`blender_manifest.toml`. The Go client version is managed in its own repository
-(the `bk_client` submodule, `bk_client/client/VERSION`) — releases pick up the
-newest client binaries available there automatically. Make sure the bump is
-merged into `main`.
+Before release bump `BASE_VERSION` (`major.minor`) in `bk_maya/_version.py` —
+the timestamped patch and channel are generated automatically at build time.
+The Go client version is managed in its own repository (the `bk_client`
+submodule, `bk_client/client/VERSION`) — releases pick up the newest client
+binaries available there automatically. Make sure the bump is merged into
+`main`.
 
-Releases run through `python bk_maya/dev.py release`, which grabs prebuilt
-client binaries from the `bk_client` submodule when available and otherwise
-builds them from source.
+Releases run through `python bk_maya/dev.py release`, which downloads the
+*signed* `bk_client.zip` from the `bk_client` GitHub releases (or unpacks a
+locally supplied bundle via `--client-build`). CI runs it with `--python both`
+and publishes the `-py39` and `-py311` zips.
 
 ## Testing
 
@@ -147,10 +167,8 @@ python -m coverage run --source=bk_maya/bk_proxor/src/bk_proxor,bk_maya/core \
         tests.test_global_vars
 ```
 
-Go tests for the client live in `./client` and can be run with:
-```
-cd client && go test ./...
-```
+Go tests for the client live in the `bk_client` submodule and run in that
+repository's own CI (`cd bk_client/client && go test ./...`).
 
 ### Pull Requests
 
@@ -168,9 +186,10 @@ The checks which must pass for a PR to be accepted are:
 - `ruff format --check .` — formatting,
 - `pydoclint .` — docstring consistency,
 - `bandit -c _bandit.yaml -ll -r .` — security (medium+ severity),
-- `gofmt` check for Go code in `./client`,
-- Go unit tests for the client,
 - Maya-port unit tests on Python 3.11 and 3.12,
 - automated build of the add-on via `python bk_maya/dev.py build`.
+
+The Go client's own gofmt check and unit tests run in the `bk_client`
+repository's CI, not here.
 
 Those CI jobs are defined in a single workflow: `.github/workflows/CI.yml`.
