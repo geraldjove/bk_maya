@@ -142,33 +142,29 @@ and publishes the `-py39` and `-py311` zips.
 
 ## Testing
 
-The Maya port ships pure-Python unit tests under `tests/`. They cover the
-PRX coordinate converters, locator state registries, PRX round-tripping and
-global var handling, and have no dependency on Maya or Qt.
+This fork retains three checks that directly support Redshift material conversion:
 
-The `bk_proxor` submodule is required by some tests, so first ensure it is
-initialised:
-```
-git submodule update --init --recursive
-```
+- `tests/test_redshift_recipe.py` checks that Redshift imports select the bundled
+  baking recipe and respect an explicit export-script override.
+- `tests/integration/test_redshift_import.py` checks shader values, textures,
+  color spaces, normals, material assignments, invalid IOR handling, renderer
+  selection and cleanup after a failed conversion in Maya standalone.
+- `tests/integration/test_procedural_bake.py` checks baked procedural detail,
+  usable UVs and legacy Glossy-to-metal conversion in Blender.
 
-Then run the suite from the repo root:
-```
-python -m unittest discover tests
-```
+Run from the repository root:
 
-Or run the same subset CI runs, with coverage:
-```
-python -m coverage run --source=bk_maya/bk_proxor/src/bk_proxor,bk_maya/core \
-    -m unittest \
-        tests.test_proxor_maya_draw \
-        tests.test_locator_state \
-        tests.test_prx_format_roundtrip \
-        tests.test_global_vars
+```powershell
+python -m unittest tests.test_redshift_recipe
+python bk_maya/dev.py vendor
+mayapy tests/integration/test_redshift_import.py
+blender --background --factory-startup --python tests/integration/test_procedural_bake.py
 ```
 
-Go tests for the client live in the `bk_client` submodule and run in that
-repository's own CI (`cd bk_client/client && go test ./...`).
+The Maya check requires MayaUSD and Redshift; set `REDSHIFT_MAYA_PLUGIN` to the
+plug-in path when it is not already discoverable. Native checks use synthetic
+scenes and temporary files. Do not add downloaded assets, scene-specific repair
+scripts, personal paths or generated test reports to the repository.
 
 ### Pull Requests
 
@@ -186,10 +182,10 @@ The checks which must pass for a PR to be accepted are:
 - `ruff format --check .` — formatting,
 - `pydoclint .` — docstring consistency,
 - `bandit -c _bandit.yaml -ll -r .` — security (medium+ severity),
-- Maya-port unit tests on Python 3.11 and 3.12,
+- Redshift export-recipe selection on Python 3.11 and 3.12,
 - automated build of the add-on via `python bk_maya/dev.py build`.
 
-The Go client's own gofmt check and unit tests run in the `bk_client`
-repository's CI, not here.
+Native Maya/Redshift and Blender checks run locally because they require the
+installed applications. Report their results when changing material conversion.
 
 Those CI jobs are defined in a single workflow: `.github/workflows/CI.yml`.

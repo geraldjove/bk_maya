@@ -53,29 +53,8 @@ Legacy Glossy-only materials get a metal approximation with baked procedural det
 view-dependent shader mixtures are not reproduced exactly. Nonpositive constant IORs
 from older assets are replaced with Redshift's default to avoid white reflective paint.
 
-To repair the dirt and stem on an existing `BK_Modular_ficus_plant` after its baked
-export has been generated, run in Maya's Python Script Editor:
-
-```python
-from bk_maya.scripts.repair_ficus import repair
-repair()
-```
-
-This transfers the baked UVs and maps onto the existing meshes and shaders in one
-undoable operation, preserving placement. It refuses changed topology or mesh history.
-
-For an existing `BK_STAEDTLER_Pencil`, after generating its updated Redshift export:
-
-```python
-from bk_maya.scripts.repair_pencil import repair
-repair()
-```
-
-This corrects the pencil's invalid IORs and restores its missing steel material in one
-undoable operation. Geometry and placement are preserved.
-
-Validated with Maya 2026, Redshift 2026.9.0 and Blender 5.2 on Windows, including
-a Redshift render of the corrected pencil. Other versions have not been validated.
+Validated with Maya 2026, Redshift 2026.9.0 and Blender 5.2 on Windows.
+Other versions have not been validated.
 
 Run these checks from a source checkout after `python bk_maya/dev.py vendor`:
 
@@ -86,9 +65,10 @@ blender --background --factory-startup --python tests/integration/test_procedura
 ```
 
 The Maya integration test requires MayaUSD and Redshift; set `REDSHIFT_MAYA_PLUGIN`
-to the plug-in path if needed. The optional ficus/pencil repair tests take the original
-and updated cached USD paths as arguments. They use separate standalone scenes.
-Downloaded models and textures are not included in this repository.
+to the plug-in path if needed. The retained tests cover export-recipe selection,
+shader values and connections, texture color spaces, normals, material assignments,
+invalid IORs, procedural baking and legacy Glossy conversion. They create synthetic
+scenes and temporary textures, with no dependency on downloaded assets or user scenes.
 
 The Redshift Blender recipe lives in `bk_maya/scripts/export_usd.py`, so it is
 included in builds of this fork. Standard Maya imports continue using the client
@@ -98,7 +78,7 @@ recipe. Explicit export-script/environment overrides still take precedence.
 - [bk_maya/](bk_maya) — the Maya plugin (core, UI, plugins, vendored libs)
 - [bk_maya/bk_proxor/](bk_maya/bk_proxor) — proxor mesh-preview submodule (`.prx` / `.prxc`)
 - [bk_client/](bk_client) — Go `blenderkit-client` submodule, shared with the Blender add-on
-- [tests/](tests) — pure-Python unit tests runnable without Maya
+- [tests/](tests) — Redshift recipe selection and native material-conversion/baking checks
 
 ## Getting started (developers)
 
@@ -115,7 +95,7 @@ python -m pip install -e ".[dev]"  # or: pdm install / uv sync --group dev
 # 3. enable pre-commit hooks (ruff + pydoclint)
 pre-commit install
 
-# 4. run the synthetic test suite
+# 4. check Redshift recipe selection (native checks are listed above)
 python -m unittest discover tests
 ```
 
@@ -168,16 +148,18 @@ and load `maya_plugin.py` from `Windows ▸ Settings/Preferences ▸ Plug-in Man
 
 ## Quality
 
-| Check        | Local                                   | CI                                            |
-|--------------|-----------------------------------------|-----------------------------------------------|
-| Lint         | `ruff check .`                          | `.github/workflows/lint.yml` → **Ruff**       |
-| Format       | `ruff format --check .`                 | `.github/workflows/lint.yml` → **Ruff**       |
-| Docstrings   | `pydoclint .`                           | `.github/workflows/lint.yml` → **Pydoclint**  |
-| Security     | `bandit -c _bandit.yaml -r .`           | `.github/workflows/lint.yml` → **Bandit**     |
-| Unit tests   | `python -m unittest discover tests`     | `.github/workflows/PR.yml` → **Maya-Port-Unit-Tests** |
-| Go client    | `go test ./client/...`                  | `.github/workflows/PR.yml` → **Client-Unit-Tests** |
+| Check | Local command | CI |
+|-------|---------------|----|
+| Lint | `ruff check .` | `CI.yml` |
+| Format | `ruff format --check .` | `CI.yml` |
+| Docstrings | `pydoclint .` | `CI.yml` |
+| Security | `bandit -c _bandit.yaml -ll -r .` | `CI.yml` |
+| Redshift recipe | `python -m unittest tests.test_redshift_recipe` | Python 3.11 and 3.12 |
+| Redshift conversion | `mayapy tests/integration/test_redshift_import.py` | Local Maya/Redshift installation |
+| Procedural baking | `blender --background --factory-startup --python tests/integration/test_procedural_bake.py` | Local Blender installation |
 
-All checks are also wired up as a [pre-commit](https://pre-commit.com) hook — see [.pre-commit-config.yaml](.pre-commit-config.yaml).
+Automation is defined in [.github/workflows/CI.yml](.github/workflows/CI.yml).
+See [CONTRIBUTING.md](CONTRIBUTING.md#testing) for native test requirements.
 
 ## How to contribute
 - Share the word about Blendkit with your friends and colleagues, or on social media.

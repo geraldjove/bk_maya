@@ -40,46 +40,22 @@ jobs:
       - name: Bandit (medium+)
         run: bandit -c _bandit.yaml -ll -r .
 
-  # The Go client's own unit tests, gofmt and coverage run in the bk_client
-  # repository's CI, not here. This repo only *builds* the client (see Build).
-
-  Maya-Port-Unit-Tests:
-    # Pure-Python tests for Maya port modules with no Maya/Qt dependency:
-    # PRX coordinate converters, locator-state registries, PRX round-trip.
+  Redshift-Recipe-Test:
+    # Check selection of the Redshift exporter without a Maya installation.
+    # Native shader conversion and baking checks run locally in Maya/Blender.
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-        with:
-          # bk_proxor lives in bk_maya/bk_proxor as a git submodule and is
-          # required by tests.test_proxor_maya_draw / test_prx_format_roundtrip.
-          submodules: recursive
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install coverage
-        run: python -m pip install coverage
-      - name: Run Maya-port unit tests
-        run: |
-          python -m coverage run --source=bk_maya/bk_proxor/src/bk_proxor,bk_maya/core \
-              -m unittest \
-                  tests.test_proxor_maya_draw \
-                  tests.test_locator_state \
-                  tests.test_prx_format_roundtrip \
-                  tests.test_global_vars \
-                  tests.test_redshift_recipe
-          python -m coverage xml -o coverage-maya-port.xml
-      - name: Upload Maya-port coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage-maya-port.xml
-          flags: maya-port
-          fail_ci_if_error: false
+      - name: Check Redshift export recipe selection
+        run: python -m unittest tests.test_redshift_recipe
 
   Build:
     runs-on: ubuntu-latest

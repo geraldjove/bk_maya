@@ -1,1 +1,1 @@
-"""Test utilities for the bk_maya client."""
+"""Checks for the Redshift material conversion pipeline."""

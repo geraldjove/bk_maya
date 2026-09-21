@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix="blendkit-bake-test-") as folder:
         assert max(pixels) - min(pixels) > 0.1, "Procedural detail must survive the bake"
 print("PASS: procedural channels baked to nonuniform textures with valid UVs and unchanged geometry/source material")
 
-# The pencil's legacy Glossy mix previously exported no usable surface at all.
+# Legacy Glossy mixes need a textured metal surface for Redshift conversion.
 legacy = bpy.data.materials.new("LegacySteel")
 legacy.use_nodes = True
 tree = legacy.node_tree

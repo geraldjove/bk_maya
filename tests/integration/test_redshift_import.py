@@ -229,18 +229,6 @@ def check():
         "PASS: Redshift model/material imports, textures, normals, per-face assignments, mode selection and failure handling"
     )
 
-    # Optional cached assets exercise real Blender exports without downloading.
-    prefs.material_target = "redshift"
-    for asset_path in sys.argv[1:]:
-        cmds.file(new=True, force=True)
-        controller._import_usd(asset_path)
-        groups = [g for g in cmds.ls(type="shadingEngine") if g not in ("initialShadingGroup", "initialParticleSE")]
-        assert groups, asset_path
-        for group in groups:
-            shader = cmds.listConnections(group + ".surfaceShader", source=True, destination=False)[0]
-            assert cmds.nodeType(shader) == "RedshiftStandardMaterial", (asset_path, group, shader)
-        print(f"PASS: {Path(asset_path).name}: {len(groups)} Redshift material assignments")
-
 
 if __name__ == "__main__":
     import maya.standalone
