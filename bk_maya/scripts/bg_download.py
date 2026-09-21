@@ -326,12 +326,13 @@ def download_file(url: str, dest_path: str, *, api_key: str = "") -> None:
 
 
 def _find_export_usd_script(args: dict) -> str:
-    """Locate ``export_usd.py`` shipped alongside the client binaries.
+    """Locate the Maya Redshift recipe or the client's standard USD recipe.
 
     Lookup order:
       1. ``args["export_usd_script"]`` (explicit override from Maya side).
       2. ``$BLENDKIT_TOOLS_DIR/export_usd.py``.
-      3. Walk up from this script and, for each ``<root>``, try the packaged
+      3. The Maya-owned recipe beside this script for Redshift baking.
+      4. Walk up from this script and, for each ``<root>``, try the packaged
          layout ``<root>/client/vX.Y.Z/tools/export_usd.py`` (tools ship inside
          the versioned client folder) as well as the legacy shared
          ``<root>/client/tools/export_usd.py`` and the ``bk_client`` submodule
@@ -347,6 +348,8 @@ def _find_export_usd_script(args: dict) -> str:
         candidates.append(os.path.join(env_dir, "export_usd.py"))
 
     here = os.path.dirname(os.path.abspath(__file__))
+    if args.get("bake_procedural"):
+        candidates.append(os.path.join(here, "export_usd.py"))
     cur = here
     for _ in range(6):
         cur = os.path.dirname(cur)
@@ -389,6 +392,8 @@ def run_export_usd(args: dict, blend_path: str, out_usd: str) -> None:
         "blend_path": blend_path,
         "out_usd": out_usd,
         "max_resolution": args.get("max_resolution", ""),
+        "bake_procedural": args.get("bake_procedural", False),
+        "export_mtlx": not args.get("bake_procedural", False),
         # Material assets ship the material datablock with no mesh bound to it;
         # export_usd.py needs these to attach the asset material to a preview
         # mesh so it actually gets written into the USD.

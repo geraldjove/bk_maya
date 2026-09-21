@@ -513,6 +513,12 @@ class _DownloadController:
         blend_name = f"{slug}_{res_key}_{asset_id}.blend" if res_key else f"{slug}_{asset_id}.blend"
         self.blend_path = os.path.join(self.work_dir, blend_name)
         self.out_usd = os.path.splitext(self.blend_path)[0] + ".usd"
+        from . import redshift
+
+        bake_procedural = redshift.is_requested()
+        if bake_procedural:
+            # A separate cache prevents reuse of exports that lost procedurals.
+            self.out_usd = os.path.splitext(self.blend_path)[0] + ".redshift-baked-v2.usd"
 
         # Networking (signed URL + file download) is delegated to the local Go
         # client over loopback — direct HTTPS from headless Blender fails SSL
@@ -530,6 +536,7 @@ class _DownloadController:
         args = {
             "asset_data": self.asset,
             "max_resolution": prefs.max_resolution,
+            "bake_procedural": bake_procedural,
             "blend_path": self.blend_path,
             "out_usd": self.out_usd,
             "api_key": auth.get_api_key(),
@@ -683,6 +690,8 @@ class _DownloadController:
                 if self.is_material:
                     self._delete_locator()
                     self._notify_ui(f"Material assign failed: {exc}")
+                else:
+                    self._notify_ui(f"Asset import failed: {exc}")
             finally:
                 self._cleanup()
 
@@ -812,6 +821,11 @@ class _DownloadController:
         self._ensure_usd_plugin()
 
         method = str(getattr(prefs, "import_method", "import") or "import").lower()
+        from . import redshift
+
+        if redshift.is_requested():
+            # Redshift shaders need native Maya meshes and shading groups.
+            method = "import"
         if method == "reference":
             new_roots = self._bring_in_as_reference(usd_path)
         elif method == "stage":
@@ -830,19 +844,27 @@ class _DownloadController:
 
     def _bring_in_as_import(self, usd_path: str) -> list[str]:
         """Merge the USD geometry into the scene; return the new root nodes."""
+        from . import redshift
+
+        use_redshift = redshift.is_requested()
+        if use_redshift:
+            redshift.ensure_available()
         before = set(cmds.ls(assemblies=True) or [])
+        before_shading_groups = set(cmds.ls(type="shadingEngine") or []) if use_redshift else set()
 
         imported_via_command = False
         try:
             cmds.mayaUSDImport(
                 file=usd_path,
                 readAnimData=False,
-                shadingMode=_USD_SHADING_MODES,
+                shadingMode=[("useRegistry", "UsdPreviewSurface")] if use_redshift else _USD_SHADING_MODES,
                 preferredMaterial="standardSurface",
                 importInstances=True,
             )
             imported_via_command = True
         except Exception as exc:
+            if use_redshift:
+                raise RuntimeError(f"USD import for Redshift failed: {exc}") from exc
             log.debug("mayaUSDImport unavailable (%s); falling back to cmds.file", exc)
 
         if not imported_via_command:
@@ -873,6 +895,10 @@ class _DownloadController:
                 )
 
         after = set(cmds.ls(assemblies=True) or [])
+        if use_redshift:
+            new_groups = sorted(set(cmds.ls(type="shadingEngine") or []) - before_shading_groups)
+            count = redshift.convert(new_groups)
+            log.info("[BK material] converted %d material(s) to Redshift", count)
         return list(after - before)
 
     def _bring_in_as_reference(self, usd_path: str) -> list[str]:
@@ -1007,20 +1033,7 @@ class _DownloadController:
 
         self._ensure_usd_plugin()
 
-        before = set(cmds.ls(assemblies=True) or [])
-        try:
-            cmds.mayaUSDImport(
-                file=usd_path,
-                readAnimData=False,
-                shadingMode=_USD_SHADING_MODES,
-                preferredMaterial="standardSurface",
-                importInstances=True,
-            )
-        except Exception as exc:
-            raise RuntimeError(f"mayaUSDImport failed for material USD: {exc}") from exc
-
-        after = set(cmds.ls(assemblies=True) or [])
-        new_roots = list(after - before)
+        new_roots = self._bring_in_as_import(usd_path)
         if not new_roots:
             raise RuntimeError("material USD imported but produced no new nodes")
 

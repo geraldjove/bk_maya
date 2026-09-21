@@ -126,6 +126,7 @@ ignore = [
     "D",
 ]
 "bk_maya/maya_plugin.py" = ["T201", "INP001"]
+"tests/integration/**" = ["T201"] # standalone Maya/Blender scripts report results on stdout
 "bk_maya/dev.py" = ["T201", "PLW1510", "PLR1722", "INP001"]
 "bk_maya/scripts/**" = ["T201", "INP001", "PLW1510"]
 "bk_maya/plugins/**" = ["E402", "T201", "INP001"]

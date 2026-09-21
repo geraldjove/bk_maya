@@ -237,6 +237,22 @@ class _FilesTab(QWidget):
         )
         layout.addWidget(self._import_method_combo)
 
+        material_form = QFormLayout()
+        self._material_target_combo = QComboBox()
+        for value, label in (("auto", "Auto (active renderer)"), ("maya", "Maya"), ("redshift", "Redshift")):
+            self._material_target_combo.addItem(label, userData=value)
+        self._material_target_combo.setCurrentIndex(
+            max(0, self._material_target_combo.findData(prefs.material_target)),
+        )
+        material_form.addRow("Materials", self._material_target_combo)
+        layout.addLayout(material_form)
+        layout.addWidget(
+            _note(
+                "Redshift materials use editable geometry, overriding Reference and USD Stage. "
+                "Fully procedural materials are baked on first import. Mixed shader networks may need manual conversion."
+            ),
+        )
+
         # ── Blender executable ────────────────────────────────────────────
         layout.addWidget(_section("Blender Executable"))
         layout.addWidget(_hr())
@@ -347,6 +363,7 @@ class _FilesTab(QWidget):
         prefs.global_dir = self._dir_edit.text().strip()
         prefs.max_resolution = self._res_combo.currentData()
         prefs.import_method = self._import_method_combo.currentData()
+        prefs.material_target = self._material_target_combo.currentData()
         new_blender = self._blender_edit.text().strip()
         blender_changed = new_blender != prefs.blender_exe
         prefs.blender_exe = new_blender

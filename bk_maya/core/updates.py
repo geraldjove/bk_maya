@@ -1,6 +1,6 @@
 """Check GitHub Releases for a newer Blendkit Maya plugin version.
 
-The plugin ships from the ``BlenderKit/bk_maya`` GitHub repository:
+This Redshift fork ships from the ``geraldjove/bk_maya`` GitHub repository:
 
   * **stable** releases are tagged ``v<major>.<minor>.<YYMMDDHHmm>`` and are
     published as normal (non pre-release) releases.  The latest one is exposed
@@ -38,7 +38,7 @@ log = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-GITHUB_REPO = "BlenderKit/bk_maya"
+GITHUB_REPO = "geraldjove/bk_maya"
 """``owner/name`` of the repository that publishes plugin releases."""
 
 _API_LATEST = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"

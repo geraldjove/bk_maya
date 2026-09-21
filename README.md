@@ -15,15 +15,17 @@
 </div>
 
 
-> **Status:** early development / **alpha**. Automated releases are now
-> published to [GitHub Releases](https://github.com/BlenderKit/bk_maya/releases):
-> every merge to `main` produces a rolling **Alpha** prerelease, and `master`
-> (or the manual *Run workflow* button) produces a regular release. The zip is
-> self-contained — unzip into a Maya `modules` directory and restart Maya, no
-> extra packages or setup required. You can still build locally with
-> `python bk_maya/dev.py build`.
+> **Status:** development fork with automatic Redshift material conversion.
+> Build from source with `python bk_maya/dev.py build`. Packaged builds contain
+> `blendkit.mod` and a `blendkit/` folder to install in Maya's `modules` directory.
+> This fork checks [its own releases](https://github.com/geraldjove/bk_maya/releases)
+> for updates, preserving the Redshift additions.
 
 ## About
+This public fork adds automatic material conversion for **Maya Redshift Renderer**,
+including procedural texture baking and fixes for legacy materials. It is based on
+[BlenderKit/bk_maya](https://github.com/BlenderKit/bk_maya).
+
 The Blendkit Maya plugin connects Autodesk Maya to the [Blendkit service](https://www.blendkit.com/) — search the library, drag&drop assets straight into the viewport, and re-use the same account / Full plan you already have for the Blender add-on.
 
 It is a port of the official Blender add-on built on:
@@ -31,6 +33,66 @@ It is a port of the official Blender add-on built on:
 - Maya 2023–2027 (Python 3.9–3.11, PySide2/PySide6 via `qtpy`, OpenMaya 2.0)
 - The shared Go `blenderkit-client` for downloads, auth and search
 - A vendored `qtpy` / `requests` / `packaging` (see [bk_maya/lib](bk_maya/lib))
+
+## Redshift materials
+
+In **Blendkit > Settings > Files > Materials**, **Auto (active renderer)** converts
+new model and material drops to Redshift Standard materials when Redshift is active.
+Choose **Redshift** to always convert, or **Maya** to keep the original import behavior.
+The `redshift4maya` plug-in must be installed and loadable.
+
+Redshift conversion imports editable Maya geometry, overriding Reference / USD Stage.
+It reuses the USD Preview Surface textures and UVs, uses Raw for data maps, converts normal maps,
+and preserves whole-object and per-face material assignments. Existing scene materials
+are unaffected. Re-import assets that were placed before enabling conversion.
+Fully procedural Principled materials are automatically baked to per-object texture
+atlases, with new UVs where needed. The first import takes longer; later imports reuse
+a separate Redshift cache. The original `.blend` remains unchanged. Mixed image /
+procedural graphs and complex shader mixes may still need manual conversion.
+Legacy Glossy-only materials get a metal approximation with baked procedural detail;
+view-dependent shader mixtures are not reproduced exactly. Nonpositive constant IORs
+from older assets are replaced with Redshift's default to avoid white reflective paint.
+
+To repair the dirt and stem on an existing `BK_Modular_ficus_plant` after its baked
+export has been generated, run in Maya's Python Script Editor:
+
+```python
+from bk_maya.scripts.repair_ficus import repair
+repair()
+```
+
+This transfers the baked UVs and maps onto the existing meshes and shaders in one
+undoable operation, preserving placement. It refuses changed topology or mesh history.
+
+For an existing `BK_STAEDTLER_Pencil`, after generating its updated Redshift export:
+
+```python
+from bk_maya.scripts.repair_pencil import repair
+repair()
+```
+
+This corrects the pencil's invalid IORs and restores its missing steel material in one
+undoable operation. Geometry and placement are preserved.
+
+Validated with Maya 2026, Redshift 2026.9.0 and Blender 5.2 on Windows, including
+a Redshift render of the corrected pencil. Other versions have not been validated.
+
+Run these checks from a source checkout after `python bk_maya/dev.py vendor`:
+
+```powershell
+python -m unittest discover tests
+mayapy tests/integration/test_redshift_import.py
+blender --background --factory-startup --python tests/integration/test_procedural_bake.py
+```
+
+The Maya integration test requires MayaUSD and Redshift; set `REDSHIFT_MAYA_PLUGIN`
+to the plug-in path if needed. The optional ficus/pencil repair tests take the original
+and updated cached USD paths as arguments. They use separate standalone scenes.
+Downloaded models and textures are not included in this repository.
+
+The Redshift Blender recipe lives in `bk_maya/scripts/export_usd.py`, so it is
+included in builds of this fork. Standard Maya imports continue using the client
+recipe. Explicit export-script/environment overrides still take precedence.
 
 ## Repository layout
 - [bk_maya/](bk_maya) — the Maya plugin (core, UI, plugins, vendored libs)
@@ -42,7 +104,7 @@ It is a port of the official Blender add-on built on:
 
 ```powershell
 # 1. clone with submodules
-git clone --recursive https://github.com/BlenderKit/bk_maya.git
+git clone --recursive https://github.com/geraldjove/bk_maya.git
 cd bk_maya
 
 # 2. create a venv and install dev tooling
@@ -78,6 +140,7 @@ and load `maya_plugin.py` from `Windows ▸ Settings/Preferences ▸ Plug-in Man
   Manager, the **Blendkit ▸ About** menu, and the Maya `.mod` module version —
   so users and admins can see exactly which build is installed.
 - **Automated releases** (see [.github/workflows/release.yml](.github/workflows/release.yml)):
+  - This fork publishes through the manual **Run workflow** action. Automatic pushes below apply to upstream.
   - merge to **`main`** → rolling **Alpha** prerelease,
   - push to **`master`** or the manual *Run workflow* button → **stable** release.
 - **Zip contents** (`blendkit-maya-<version>-py39.zip` / `-py311.zip`): the

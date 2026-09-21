@@ -86,6 +86,10 @@ class _Prefs:
     ``reference`` — link the USD as a Maya file reference (editable, unloadable);
     ``stage``     — load the USD as a native Maya USD stage (mayaUsdProxyShape, default)."""
 
+    material_target: str = "auto"
+    """auto follows the active renderer; maya preserves USD import; redshift
+    imports editable geometry and converts its materials to Redshift."""
+
     # ── Search filters ─────────────────────────────────────────────────────
     search_texture_resolution: bool = False
     """Limit search results by texture resolution."""
